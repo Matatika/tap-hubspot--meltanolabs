@@ -365,7 +365,7 @@ class DynamicIncrementalHubspotStream(DynamicHubspotStream):
                         },
                     ],
                     # Hubspot sets a limit of most 100 per request. Default is 10
-                    "limit": 100,
+                    "limit": 200,
                     "properties": list(self.hs_properties),
                 },
             )
