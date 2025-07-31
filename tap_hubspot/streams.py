@@ -5,6 +5,7 @@ from __future__ import annotations
 import typing as t
 
 from singer_sdk import typing as th  # JSON Schema typing helpers
+from typing_extensions import override
 
 from tap_hubspot.client import (
     DynamicIncrementalHubspotStream,
@@ -897,3 +898,133 @@ class TaskStream(DynamicIncrementalHubspotStream):
     def url_base(self) -> str:
         """Returns an updated path which includes the api version."""
         return "https://api.hubapi.com/crm/v3"
+
+
+class FormsStream(HubspotStream):
+    """https://developers.hubspot.com/docs/reference/api/marketing/forms/#get-%2Fmarketing%2Fv3%2Fforms%2F."""
+
+    name = "forms"
+    path = "/marketing/v3/forms"
+    primary_keys = ("id",)
+    records_jsonpath = "$[results][*]"  # Or override `parse_response`.
+
+    schema = th.PropertiesList(
+        th.Property("id", th.StringType),
+        th.Property("name", th.StringType),
+        th.Property("createdAt", th.DateTimeType),
+        th.Property("updatedAt", th.DateTimeType),
+        th.Property("archived", th.BooleanType),
+        th.Property(
+            "fieldGroups",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("groupType", th.StringType),
+                    th.Property("richTextType", th.StringType),
+                    th.Property(
+                        "fields",
+                        th.ArrayType(
+                            th.ObjectType(
+                                th.Property("objectTypeId", th.StringType),
+                                th.Property("name", th.StringType),
+                                th.Property("label", th.StringType),
+                                th.Property("description", th.StringType),
+                                th.Property("required", th.BooleanType),
+                                th.Property("hidden", th.BooleanType),
+                                th.Property("defaultValue", th.StringType),
+                                th.Property("placeholder", th.StringType),
+                                th.Property("fieldType", th.StringType),
+                                additional_properties=True,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        th.Property(
+            "configuration",
+            th.ObjectType(
+                th.Property("language", th.StringType),
+                th.Property("cloneable", th.BooleanType),
+                th.Property(
+                    "postSubmitAction",
+                    th.ObjectType(
+                        th.Property("type", th.StringType),
+                        th.Property("value", th.StringType),
+                    ),
+                ),
+                th.Property("editable", th.BooleanType),
+                th.Property("archivable", th.BooleanType),
+                th.Property("recaptchaEnabled", th.BooleanType),
+                th.Property("notifyContactOwner", th.BooleanType),
+                th.Property("notifyRecipients", th.ArrayType(th.StringType)),
+                th.Property("createNewContactForNewEmail", th.BooleanType),
+                th.Property("prePopulateKnownValues", th.BooleanType),
+                th.Property("allowLinkToResetKnownValues", th.BooleanType),
+                th.Property(
+                    "lifecycleStages",
+                    th.ArrayType(
+                        th.ObjectType(
+                            th.Property("objectTypeId", th.StringType),
+                            th.Property("value", th.StringType),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        th.Property(
+            "displayOptions",
+            th.ObjectType(
+                th.Property("renderRawHtml", th.BooleanType),
+                th.Property("theme", th.StringType),
+                th.Property("submitButtonText", th.StringType),
+                th.Property("style", th.ObjectType(additional_properties=True)),
+                th.Property("cssClass", th.StringType),
+            ),
+        ),
+        th.Property(
+            "legalConsentOptions",
+            th.ObjectType(
+                th.Property("subscriptionTypeIds", th.ArrayType(th.IntegerType)),
+                th.Property("lawfulBasis", th.StringType),
+                th.Property("privacyText", th.StringType),
+                th.Property("type", th.StringType),
+            ),
+        ),
+        th.Property("formType", th.StringType),
+    ).to_dict()
+
+    @override
+    def get_child_context(self, record, context):  # noqa: ANN001, ANN201
+        return {"form_id": record["id"]}
+
+
+class FormSubmissionsStream(HubspotStream):
+    """https://developers.hubspot.com/docs/reference/api/marketing/forms/v1#get-submissions-for-a-form."""
+
+    parent_stream_type = FormsStream
+    name = "form_submissions"
+    path = "/form-integrations/v1/submissions/forms/{form_id}"
+    primary_keys = ("conversionId",)
+    records_jsonpath = "$[results][*]"  # Or override `parse_response`.
+
+    schema = th.PropertiesList(
+        th.Property("conversionId", th.StringType),
+        th.Property("submittedAt", th.IntegerType),
+        th.Property(
+            "values",
+            th.ArrayType(
+                th.ObjectType(
+                    th.Property("name", th.StringType),
+                    th.Property("value", th.StringType),
+                    th.Property("objectTypeId", th.StringType),
+                ),
+            ),
+        ),
+        th.Property("pageUrl", th.URIReferenceType),
+    ).to_dict()
+
+    @override
+    def get_url_params(self, context, next_page_token):  # noqa: ANN001, ANN201
+        params = super().get_url_params(context, next_page_token)
+        params["limit"] = 50  # max supported
+        return params
